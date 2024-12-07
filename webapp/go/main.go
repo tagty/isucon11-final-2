@@ -576,6 +576,25 @@ func (h *handlers) GetGrades(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	// 講義一覧を一括取得
+	courseIDs := make([]string, len(registeredCourses))
+	for i, course := range registeredCourses {
+		courseIDs[i] = course.ID
+	}
+
+	var allClasses []Class
+	query = "SELECT * FROM `classes` WHERE `course_id` IN (?) ORDER BY `part` DESC"
+	query, args, err := sqlx.In(query, courseIDs)
+	if err != nil {
+		c.Logger().Error(err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	query = h.DB.Rebind(query)
+	if err := h.DB.Select(&allClasses, query, args...); err != nil {
+		c.Logger().Error(err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+
 	// 科目毎の成績計算処理
 	courseResults := make([]CourseResult, 0, len(registeredCourses))
 	myGPA := 0.0
@@ -583,13 +602,10 @@ func (h *handlers) GetGrades(c echo.Context) error {
 	for _, course := range registeredCourses {
 		// 講義一覧の取得
 		var classes []Class
-		query = "SELECT *" +
-			" FROM `classes`" +
-			" WHERE `course_id` = ?" +
-			" ORDER BY `part` DESC"
-		if err := h.DB.Select(&classes, query, course.ID); err != nil {
-			c.Logger().Error(err)
-			return c.NoContent(http.StatusInternalServerError)
+		for _, class := range allClasses {
+			if class.CourseID == course.ID {
+				classes = append(classes, class)
+			}
 		}
 
 		// 講義毎の成績計算処理
